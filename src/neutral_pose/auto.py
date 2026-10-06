@@ -177,11 +177,12 @@ def _discover_joint_task(meshes, index):
         return definition, evidence
 
 
-def prepare_specimen(folder, workers=1):
+def prepare_specimen(folder, workers=1, seed=42):
     """Load a specimen and infer coordinates, symmetry planes, contacts and spacing.
 
     Returns ``(meshes, config, options, inference)`` ready for :func:`neutral_pose.core.fit_column`.
-    ``workers`` > 1 discovers contacts for adjacent pairs in parallel processes.
+    ``workers`` > 1 discovers contacts for adjacent pairs in parallel processes. ``seed`` is
+    the fit's random seed (``Options.seed``); the default is the validated release setting.
     """
     paths, landmark_paths = input_files(folder)
     units = mesh_units(paths)
@@ -195,6 +196,7 @@ def prepare_specimen(folder, workers=1):
     nearest = cKDTree(origins).query(origins, k=min(4, len(meshes)))[1]
     neighbor_fraction = float(np.mean([i + 1 in nearest[i] for i in range(len(meshes) - 1)]))
     options = n.Options(
+        seed=seed,
         samples=96,
         target_samples=1200,
         collision_samples=192,
@@ -634,14 +636,14 @@ def select_supported_poses(meshes, poses, report, joints, workers=1):
     return matrices, selected, result
 
 
-def process_specimen(folder, output, overwrite=False, workers=1):
+def process_specimen(folder, output, overwrite=False, workers=1, seed=42):
     """Run the automatic pipeline on one specimen folder and write results atomically to ``output``."""
     folder, output = Path(folder).resolve(), Path(output).resolve()
     if output == folder or folder.is_relative_to(output):
         raise ValueError("Output cannot replace an input folder or one of its parents.")
     if output.exists() and not overwrite:
         raise FileExistsError(f"Output exists: {output}. Use --overwrite to replace it.")
-    meshes, config, options, inference = prepare_specimen(folder, workers)
+    meshes, config, options, inference = prepare_specimen(folder, workers, seed)
     # Keep references portable when the source was unpacked into a temporary
     # directory. Input hashes and original basenames remain in the receipt.
     for mesh in meshes:
@@ -693,10 +695,11 @@ def process_specimen(folder, output, overwrite=False, workers=1):
     return report
 
 
-def run(source, output=None, overwrite=False, workers=1):
+def run(source, output=None, overwrite=False, workers=1, seed=42):
     """Process a specimen folder, ZIP, or parent folder of specimens.
 
     ``workers`` is a process count or ``"auto"``; results do not depend on it.
+    ``seed`` is the fit's random seed (default 42, the validated release setting).
 
     Returns a list of ``{'specimen', 'status', 'output'}`` records (with
     ``'error'`` for failed specimens in batch mode).
@@ -722,13 +725,13 @@ def run(source, output=None, overwrite=False, workers=1):
         if not folders:
             raise ValueError("No specimen folder containing at least two meshes was found.")
         if len(folders) == 1:
-            report = process_specimen(folders[0], output, overwrite, workers)
+            report = process_specimen(folders[0], output, overwrite, workers, seed)
             return [{"specimen": folders[0].name, "status": report["status"], "output": str(output)}]
         results = []
         for folder in folders:
             target = output / folder.relative_to(root)
             try:
-                report = process_specimen(folder, target, overwrite, workers)
+                report = process_specimen(folder, target, overwrite, workers, seed)
                 results.append({"specimen": folder.name, "status": report["status"], "output": str(target)})
             except Exception as error:
                 LOG.error("%s: %s", folder.name, error)
@@ -753,6 +756,12 @@ def main(argv=None):
         "Results are identical for any value; use 1 to run serially.",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for the fit (default: 42, the validated release setting).",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -762,7 +771,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level), format="%(levelname)s: %(message)s")
     try:
-        results = run(args.input, args.out, args.overwrite, resolve_workers(args.workers))
+        results = run(args.input, args.out, args.overwrite, resolve_workers(args.workers), args.seed)
         for result in results:
             LOG.info("%s", json.dumps(result))
         return int(any(x["status"] == "failed" for x in results))
