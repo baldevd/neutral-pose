@@ -59,10 +59,9 @@ def test_spacing_comes_from_input_surfaces_not_a_fixed_gap(tmp_path, gap):
     assert pair.a.anchor_source == "inferred_surface_center"
 
 
-def test_automatic_zip_run_needs_no_config_and_preserves_landmarks(tmp_path):
+def write_vertebra_pair(source):
     from test_realistic import marching_cubes_vertebra
 
-    source = tmp_path / "input" / "specimen"
     source.mkdir(parents=True)
     for i in range(2):
         mesh = marching_cubes_vertebra(
@@ -75,6 +74,11 @@ def test_automatic_zip_run_needs_no_config_and_preserves_landmarks(tmp_path):
             [f"F-{k + 1}" for k in range(len(mesh.landmarks.labels))],
             "LPS",
         )
+
+
+def test_automatic_zip_run_needs_no_config_and_preserves_landmarks(tmp_path):
+    source = tmp_path / "input" / "specimen"
+    write_vertebra_pair(source)
     # Nested analysis tables are not additional specimens.
     tables = source / "LMKs" / "analysis"
     tables.mkdir()
@@ -106,6 +110,19 @@ def test_automatic_zip_run_needs_no_config_and_preserves_landmarks(tmp_path):
         assert np.allclose(result.points, n.transform(matrices[i], original.points))
     with pytest.raises(FileExistsError):
         auto.run(archive)
+
+
+def test_seed_reaches_the_fit_and_repeats_exactly_across_workers(tmp_path):
+    source = tmp_path / "specimen"
+    write_vertebra_pair(source)
+    for out in ("first", "again"):
+        assert auto.main([str(source), "--out", str(tmp_path / out), "--seed", "7", "--workers", "2"]) == 0
+    for out in ("first", "again"):
+        report = json.loads((tmp_path / out / "neutral_report.json").read_text())
+        setup = json.loads((tmp_path / out / "automatic_setup.json").read_text())
+        assert report["options"]["seed"] == setup["options"]["seed"] == 7
+    first, again = (np.load(tmp_path / out / "neutral_transforms.npy") for out in ("first", "again"))
+    assert np.array_equal(first, again)
 
 
 def test_automatic_preview_reports_self_intersections_instead_of_certifying_signs():

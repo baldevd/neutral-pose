@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `neutral-pose-auto --seed N` (and `seed=` in `auto.run`, `process_specimen`,
+  `prepare_specimen`) sets the fit's random seed. The default stays 42, so
+  results without the flag are unchanged.
+
 ## 1.7.0 (2026-09-14) — packaging and code-quality release
 
 No change to the fitted model. Every function of the 1.6.2 fitting, discovery,

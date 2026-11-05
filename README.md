@@ -49,6 +49,7 @@ Results are written beside the input in a folder ending in `_neutral`
 | `--out PATH` | Write results somewhere else. |
 | `--overwrite` | Replace an existing result. The previous result is only removed after the new one is written; inputs are never modified. |
 | `--workers N` | Worker processes for independent per-joint work (default `auto` = all CPUs). Results are identical for any value; `--workers 1` runs serially. |
+| `--seed N` | Random seed for the fit (default 42, the validated release setting). |
 | `--log-level DEBUG` | More console detail. |
 
 Open `articulation_preview.png` first. For Slicer/VTK load `column_neutral.vtp`
